@@ -1,0 +1,112 @@
+// prisma/schema.prisma
+// Micro-Skill Swap "Konnex" Schema for Neon Serverless PostgreSQL
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum SessionStatus {
+  PENDING    // 🕒 Awaiting mentor acceptance
+  ACCEPTED   // 💖 Mentor agreed, ready to meet
+  COMPLETED  // 🎉 Finished! 1 token transferred
+  CANCELLED  // ❌ Declined or cancelled
+}
+
+enum TransactionType {
+  INITIAL_GRANT  // 🎁 2 free tokens upon onboarding
+  SWAP_TRANSFER  // 🪙 1-token exchange for 1 hr skill session
+  REFUND         // ↩️ Refund if cancelled
+  BONUS          // ✨ Community streak bonus
+}
+
+model User {
+  id              String      @id @default(cuid())
+  email           String      @unique
+  username        String      @unique
+  name            String
+  bio             String?
+  avatar          String      // Emoji or avatar URL (e.g. "🐱", "🦊", "🐰")
+  avatarBg        String      @default("#FFEFA6") // Pastel background
+  token_balance   Int         @default(2) // Initial 2 tokens for onboarding
+  skills_offered  String[]    // e.g. ["React 💻", "UI/UX 🎨", "Figma 🖌️"]
+  skills_wanted   String[]    // e.g. ["Korean 🇰🇷", "Crochet 🧶", "Notion 📓"]
+  rating          Float       @default(5.0)
+  total_swaps     Int         @default(0)
+  pronouns        String      @default("they/them")
+  vibeTag         String      @default("Super Chill 🌈")
+
+  // Sessions as Learner (spends 1 token upon completion)
+  sessionsAsLearner Session[] @relation("LearnerSessions")
+
+  // Sessions as Mentor (earns 1 token upon completion)
+  sessionsAsMentor  Session[] @relation("MentorSessions")
+
+  // Safe Token Ledger History
+  sentTransactions     TransactionLedger[] @relation("SentTransactions")
+  receivedTransactions TransactionLedger[] @relation("ReceivedTransactions")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([username])
+}
+
+model Session {
+  id              String         @id @default(cuid())
+  topic           String         // e.g. "Figma Auto-Layout & Design Systems"
+  skill           String         // The specific skill being swapped (e.g. "UI/UX 🎨")
+  notes           String?        // Sweet note from learner
+  status          SessionStatus  @default(PENDING)
+  scheduledAt     DateTime?
+  durationMinutes Int            @default(60) // 1 hour micro-session = 1 token
+  tokenAmount     Int            @default(1)  // Standard 1 token exchange
+
+  // Learner (Recipient of knowledge, pays token)
+  learnerId       String
+  learner         User           @relation("LearnerSessions", fields: [learnerId], references: [id], onDelete: Cascade)
+
+  // Mentor (Provider of skill, earns token)
+  mentorId        String
+  mentor          User           @relation("MentorSessions", fields: [mentorId], references: [id], onDelete: Cascade)
+
+  // 1-to-1 link to Transaction Ledger record once completed
+  transaction     TransactionLedger? @relation("SessionTransaction")
+
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  @@index([learnerId])
+  @@index([mentorId])
+  @@index([status])
+}
+
+model TransactionLedger {
+  id          String          @id @default(cuid())
+  amount      Int             @default(1)
+  type        TransactionType @default(SWAP_TRANSFER)
+  description String          // Human-readable narrative e.g. "Completed 1-hr swap: UI/UX 🎨"
+
+  // Sender (Learner who paid the token)
+  senderId    String
+  sender      User            @relation("SentTransactions", fields: [senderId], references: [id], onDelete: Cascade)
+
+  // Receiver (Mentor who received the token)
+  receiverId  String
+  receiver    User            @relation("ReceivedTransactions", fields: [receiverId], references: [id], onDelete: Cascade)
+
+  // Linked completed session (optional for onboarding grants)
+  sessionId   String?         @unique
+  session     Session?        @relation("SessionTransaction", fields: [sessionId], references: [id], onDelete: SetNull)
+
+  createdAt   DateTime        @default(now())
+
+  @@index([senderId])
+  @@index([receiverId])
+  @@index([createdAt])
+}

@@ -1,0 +1,8 @@
+{
+  "name": "Remix Konnex - Micro-Skill Swap",
+  "description": "Playful Gen-Z neo-brutalist pastel pop skill swapping platform powered by time-banking tokens.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
